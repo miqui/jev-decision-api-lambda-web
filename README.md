@@ -24,6 +24,17 @@ Task list: `openspec/changes/jev-decision-api/tasks.md`.
 ![Architecture](docs/architecture.png)
 *Rendered from docs/architecture.drawio — open in draw.io to edit.*
 
+Request flow:
+
+1. The client sends an HTTPS request with an `x-api-key` header to CloudFront.
+2. CloudFront (OAC) signs the origin request with SigV4 and forwards `x-api-key`. POST responses are never cached. The Web Function endpoint uses `IamAuth`, so only this distribution can call it.
+3. Hono hashes `x-api-key` (SHA-256) and looks the hash up in DynamoDB. A missing, unknown or revoked key returns an identical 401. `/healthz` skips auth. If the lookup itself fails, the request fails closed with a 500.
+4. Hono validates the body (schema, body-size cap, question-count cap) and returns 400 or 413 on violations (defaults: 64 KiB, 1-20 questions).
+5. Hono reads the OpenRouter key from Secrets Manager (cached after first successful read) and POSTs to `openrouter.ai/api/alpha/decisions` with model `typesafe/jev-1.13`. An upstream failure maps to 502 and a timeout (10 s default) to 504; no upstream details are returned.
+6. The typed answers (`noul`, `choice`, `score`) are returned as `{answers}` with an `x-request-id` header.
+
+Provisioning: `bootstrap/` (built, validated but not applied) creates the remote state bucket and the GitHub OIDC plan role. The `infra/` stack, the deploy script and CI are planned. The Web Function is created by the standalone deploy script outside Terraform state until the AWS provider supports it.
+
 ## API summary
 
 - `GET /healthz`: 200 `{"status":"ok"}`, unauthenticated.
