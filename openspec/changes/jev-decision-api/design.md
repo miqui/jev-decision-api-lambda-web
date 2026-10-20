@@ -4,23 +4,8 @@ See proposal.md. Constraints: Lambda Web Functions support only `nodejs24.x`; th
 
 ## Architecture
 
-```
-client --x-api-key--> CloudFront (OAC, SigV4 always-amz-auth)
-                          |  origin: <fn>.lambda-web.us-east-1.on.aws (IamAuth)
-                          v
-                 Lambda Web Function (Hono, nodejs24.x)
-                   |- GET  /healthz
-                   |- POST /v1/decisions
-                   |     1. hash x-api-key -> DynamoDB GetItem (active?)
-                   |     2. validate body (zod, size/question caps)
-                   |     3. POST openrouter.ai/api/alpha/decisions
-                   |        model typesafe/jev-1.13, Bearer from Secrets Manager
-                   '- 4. return answers (types noul|choice|score)
-
-Terraform bootstrap/ (local state): S3 state bucket, OIDC provider, plan role
-Terraform infra/ (S3 state):        code bucket, exec role, DynamoDB, secret, CloudFront, alarms
-scripts/deploy-web-function.sh:     aws lambda-web deploy (outside state)
-```
+![Architecture](../../../docs/architecture.png)
+*Rendered from docs/architecture.drawio — open in draw.io to edit.*
 
 ## Goals / Non-Goals
 
