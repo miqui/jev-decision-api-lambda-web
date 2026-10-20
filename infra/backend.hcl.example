@@ -1,0 +1,8 @@
+# Copy to infra/backend.hcl (not committed) and run:
+#   terraform init -backend-config=backend.hcl
+bucket       = "jev-decision-api-tfstate-168523833501-us-east-1"
+key          = "jev-decision-api/prod/terraform.tfstate"
+region       = "us-east-1"
+use_lockfile = true
+encrypt      = true
+kms_key_id   = "<kms_key_arn output from bootstrap>"
