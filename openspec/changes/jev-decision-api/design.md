@@ -4,23 +4,19 @@ See proposal.md. Constraints: Lambda Web Functions support only `nodejs24.x`; th
 
 ## Architecture
 
-```
-client --x-api-key--> CloudFront (OAC, SigV4 always-amz-auth)
-                          |  origin: <fn>.lambda-web.us-east-1.on.aws (IamAuth)
-                          v
-                 Lambda Web Function (Hono, nodejs24.x)
-                   |- GET  /healthz
-                   |- POST /v1/decisions
-                   |     1. hash x-api-key -> DynamoDB GetItem (active?)
-                   |     2. validate body (zod, size/question caps)
-                   |     3. POST openrouter.ai/api/alpha/decisions
-                   |        model typesafe/jev-1.13, Bearer from Secrets Manager
-                   '- 4. return answers (types noul|choice|score)
+![Architecture](../../../docs/architecture.png)
+*Rendered from docs/architecture.drawio — open in draw.io to edit.*
 
-Terraform bootstrap/ (local state): S3 state bucket, OIDC provider, plan role
-Terraform infra/ (S3 state):        code bucket, exec role, DynamoDB, secret, CloudFront, alarms
-scripts/deploy-web-function.sh:     aws lambda-web deploy (outside state)
-```
+Request flow:
+
+1. The client sends an HTTPS request with an `x-api-key` header to CloudFront.
+2. CloudFront (OAC) signs the origin request with SigV4 and forwards `x-api-key`. POST responses are never cached. The Web Function endpoint uses `IamAuth`, so only this distribution can call it.
+3. Hono hashes `x-api-key` (SHA-256) and looks the hash up in DynamoDB. A missing, unknown or revoked key returns an identical 401. `/healthz` skips auth. If the lookup itself fails, the request fails closed with a 500.
+4. Hono validates the body (schema, body-size cap, question-count cap) and returns 400 or 413 on violations (defaults: 64 KiB, 1-20 questions).
+5. Hono reads the OpenRouter key from Secrets Manager (cached after first successful read) and POSTs to `openrouter.ai/api/alpha/decisions` with model `typesafe/jev-1.13`. An upstream failure maps to 502 and a timeout (10 s default) to 504; no upstream details are returned.
+6. The typed answers (`noul`, `choice`, `score`) are returned as `{answers}` with an `x-request-id` header.
+
+Provisioning: `bootstrap/` (built, validated but not applied) creates the remote state bucket and the GitHub OIDC plan role. The `infra/` stack, the deploy script and CI are planned. The Web Function is created by the standalone deploy script outside Terraform state until the AWS provider supports it.
 
 ## Goals / Non-Goals
 
