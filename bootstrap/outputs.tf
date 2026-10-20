@@ -11,6 +11,6 @@ output "kms_key_arn" {
 }
 
 output "plan_policy_arn" {
-  description = "Use with aws iam create-policy-version when iam/plan-role-policy.json changes."
+  description = "ARN of the Terraform-managed plan role policy."
   value       = aws_iam_policy.plan.arn
 }

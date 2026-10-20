@@ -2,9 +2,9 @@
 
 One-time Terraform stack (local state, never committed) that creates what `infra/` and CI need:
 
-- S3 state bucket `jev-decision-api-tfstate-168523833501-us-east-1` (versioning, SSE-KMS with a dedicated rotating key, public access block, TLS-only policy, noncurrent versions expire after 90d, `force_destroy = false`)
+- S3 state bucket `jev-decision-api-tfstate-<account_id>-us-east-1` (versioning, SSE-KMS with a dedicated rotating key, public access block, TLS-only policy, noncurrent versions expire after 90d, `force_destroy = false`)
 - GitHub OIDC provider (`create_oidc_provider`, default `true`; set `-var create_oidc_provider=false` if the account already has `token.actions.githubusercontent.com`, it is then looked up instead)
-- Read-only role `jev-decision-api-plan`, trusted only for `sub = repo:miqui/jev-decision-api-lambda-web:pull_request`, `aud = sts.amazonaws.com`. Its policy is `iam/plan-role-policy.json` (source of truth, loaded via `file()`). It cannot write to the state bucket (CI plans use `-lock=false`) and cannot read secret values.
+- Read-only role `jev-decision-api-plan`, trusted only for `sub = repo:miqui/jev-decision-api-lambda-web:pull_request`, `aud = sts.amazonaws.com`. Its policy is generated from the bootstrap resources in Terraform. It cannot write to the state bucket (CI plans use `-lock=false`) and cannot read secret values.
 
 Region: us-east-1 only. Account guard: `allowed_account_ids`.
 
@@ -28,18 +28,13 @@ gh secret set AWS_PLAN_ROLE_ARN --repo miqui/jev-decision-api-lambda-web --body 
 terraform output kms_key_arn   # put into infra/backend.hcl (see infra/backend.hcl.example)
 ```
 
-## Policy changes lag
+## Policy changes
 
-The role policy in AWS only changes when bootstrap is re-applied. After merging changes under `iam/`, either re-apply, or push a new default version:
+The role policy in AWS only changes when bootstrap is re-applied:
 
 ```sh
-aws iam create-policy-version \
-  --policy-arn <plan_policy_arn output> \
-  --policy-document file://iam/plan-role-policy.json \
-  --set-as-default
+terraform apply
 ```
-
-(IAM keeps at most 5 versions; delete an old non-default one first if needed.)
 
 ## Run manually
 
@@ -50,5 +45,4 @@ cd bootstrap
 terraform fmt -check -recursive      # exit 0, no output
 terraform init -backend=false        # Success; lock file .terraform.lock.hcl written
 terraform validate                   # Success! The configuration is valid.
-python3 -m json.tool iam/plan-role-policy.json   # valid JSON
 ```

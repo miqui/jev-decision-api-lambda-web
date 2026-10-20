@@ -149,10 +149,157 @@ resource "aws_iam_role" "plan" {
   max_session_duration = 3600
 }
 
-# Source of truth: iam/plan-role-policy.json
+data "aws_iam_policy_document" "plan" {
+  statement {
+    sid       = "ReadStateObjects"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:GetObjectVersion"]
+    resources = ["${aws_s3_bucket.state.arn}/*"]
+  }
+
+  statement {
+    sid       = "ListStateBucket"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket", "s3:GetBucketLocation"]
+    resources = [aws_s3_bucket.state.arn]
+  }
+
+  statement {
+    sid       = "DecryptState"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt", "kms:DescribeKey"]
+    resources = [aws_kms_key.state.arn]
+
+    condition {
+      test     = "ForAnyValue:StringEquals"
+      variable = "kms:ResourceAliases"
+      values   = ["alias/jev-decision-api-tfstate"]
+    }
+  }
+
+  statement {
+    sid    = "ReadS3Config"
+    effect = "Allow"
+    actions = [
+      "s3:GetBucket*",
+      "s3:GetEncryptionConfiguration",
+      "s3:GetLifecycleConfiguration",
+      "s3:GetAccelerateConfiguration",
+      "s3:GetReplicationConfiguration",
+      "s3:ListBucket",
+      "s3:ListAllMyBuckets"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ReadDynamoDB"
+    effect = "Allow"
+    actions = [
+      "dynamodb:DescribeTable",
+      "dynamodb:DescribeContinuousBackups",
+      "dynamodb:DescribeTimeToLive",
+      "dynamodb:DescribeContributorInsights",
+      "dynamodb:ListTagsOfResource",
+      "dynamodb:ListTables"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "ReadSecretsMetadataOnly"
+    effect    = "Allow"
+    actions   = ["secretsmanager:DescribeSecret", "secretsmanager:GetResourcePolicy"]
+    resources = ["arn:aws:secretsmanager:${local.region}:${var.account_id}:secret:jev-decision-api*"]
+  }
+
+  statement {
+    sid    = "ReadIAM"
+    effect = "Allow"
+    actions = [
+      "iam:GetRole",
+      "iam:GetRolePolicy",
+      "iam:GetPolicy",
+      "iam:GetPolicyVersion",
+      "iam:GetOpenIDConnectProvider",
+      "iam:ListRolePolicies",
+      "iam:ListAttachedRolePolicies",
+      "iam:ListPolicyVersions",
+      "iam:ListInstanceProfilesForRole",
+      "iam:ListRoleTags"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ReadCloudFront"
+    effect = "Allow"
+    actions = [
+      "cloudfront:GetDistribution",
+      "cloudfront:GetDistributionConfig",
+      "cloudfront:GetOriginAccessControl",
+      "cloudfront:GetOriginRequestPolicy",
+      "cloudfront:GetCachePolicy",
+      "cloudfront:GetResponseHeadersPolicy",
+      "cloudfront:ListDistributions",
+      "cloudfront:ListOriginAccessControls",
+      "cloudfront:ListOriginRequestPolicies",
+      "cloudfront:ListCachePolicies",
+      "cloudfront:ListTagsForResource"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ReadCloudWatch"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:DescribeAlarms",
+      "cloudwatch:ListTagsForResource",
+      "logs:DescribeLogGroups",
+      "logs:ListTagsForResource",
+      "logs:ListTagsLogGroup"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ReadKMS"
+    effect = "Allow"
+    actions = [
+      "kms:DescribeKey",
+      "kms:GetKeyPolicy",
+      "kms:GetKeyRotationStatus",
+      "kms:ListAliases",
+      "kms:ListResourceTags"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ReadLambda"
+    effect = "Allow"
+    actions = [
+      "lambda:GetFunction",
+      "lambda:GetFunctionConfiguration",
+      "lambda:GetPolicy",
+      "lambda:ListTags",
+      "lambda:ListVersionsByFunction"
+    ]
+    resources = ["arn:aws:lambda:${local.region}:${var.account_id}:function:jev-decision-api-*"]
+  }
+
+  statement {
+    sid       = "ListLambdaFunctions"
+    effect    = "Allow"
+    actions   = ["lambda:ListFunctions"]
+    resources = ["*"]
+  }
+}
+
 resource "aws_iam_policy" "plan" {
   name   = "jev-decision-api-plan-readonly"
-  policy = file("${path.module}/iam/plan-role-policy.json")
+  policy = data.aws_iam_policy_document.plan.json
 }
 
 resource "aws_iam_role_policy_attachment" "plan" {
